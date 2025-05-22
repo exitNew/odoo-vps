@@ -3,9 +3,13 @@ services:
   web:
     image: odoo:17.0
     depends_on:
-      - db
+      db:
+        condition: service_healthy
     ports:
       - "8069:8069"
+    deploy:
+      mode: replicated
+      replicas: 1
     volumes:
       - ./odoo-web-data:/var/lib/odoo
       - ./config:/etc/odoo
@@ -16,6 +20,7 @@ services:
       - postgresql_password
     command: >
       -- --dev=reload
+      --without-demo=all
       -d odoo-test
       -u all
     restart: always
@@ -34,8 +39,11 @@ services:
     secrets:
       - postgresql_password
     restart: always
-
-  
+    healthcheck:
+      test: [ "CMD", "pg_isready" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
 secrets:
   postgresql_password:
