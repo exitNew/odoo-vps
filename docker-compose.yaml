@@ -13,8 +13,8 @@ services:
       - "--entrypoints.web.http.redirections.entrypoint.to=websecure"
       - "--entrypoints.web.http.redirections.entrypoint.scheme=https"
     ports:
-      - "80:80"
-      - "443:443"
+      - "8080:80"
+      - "8443:443"
     volumes:
       - letsencrypt:/letsencrypt
       - /var/run/docker.sock:/var/run/docker.sock
@@ -22,9 +22,9 @@ services:
   web:
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.guestbook.rule=Host(``)"
-      - "traefik.http.routers.guestbook.entrypoints=websecure"
-      - "traefik.http.routers.guestbook.tls.certresolver=myresolver"
+      - "traefik.http.routers.web.rule=Host(``)"
+      - "traefik.http.routers.web.entrypoints=websecure"
+      - "traefik.http.routers.web.tls.certresolver=myresolver"
     image: odoo:17.0
     depends_on:
       db:
