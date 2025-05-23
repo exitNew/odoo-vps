@@ -1,6 +1,30 @@
 version: '3.1'
 services:
+  reverse-proxy:
+    image: traefik:v3.1
+    command:
+      - "--providers.docker"
+      - "--providers.docker.exposedbydefault=false"
+      - "--entryPoints.websecure.address=:443"
+      - "--certificatesresolvers.myresolver.acme.tlschallenge=true"
+      - "--certificatesresolvers.myresolver.acme.email="
+      - "--certificatesresolvers.myresolver.acme.storage=/letsencrypt/acme.json"
+      - "--entrypoints.web.address=:80"
+      - "--entrypoints.web.http.redirections.entrypoint.to=websecure"
+      - "--entrypoints.web.http.redirections.entrypoint.scheme=https"
+    ports:
+      - "8080:80"
+      - "8443:443"
+    volumes:
+      - letsencrypt:/letsencrypt
+      - /var/run/docker.sock:/var/run/docker.sock
+
   web:
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.web.rule=Host(``)"
+      - "traefik.http.routers.web.entrypoints=websecure"
+      - "traefik.http.routers.web.tls.certresolver=myresolver"
     image: odoo:17.0
     depends_on:
       db:
@@ -11,7 +35,7 @@ services:
       mode: replicated
       replicas: 1
     volumes:
-      - odoo-web-data:/var/lib/odoo
+      - ./odoo-web-data:/var/lib/odoo
       - ./config:/etc/odoo
       - ./addons:/mnt/extra-addons:rw
     environment:
@@ -35,7 +59,7 @@ services:
     ports:
       - "54321:5432"
     volumes:
-      - odoo-db-data:/var/lib/postgresql/data/pgdata
+      - ./odoo-db-data:/var/lib/postgresql/data/pgdata
     secrets:
       - postgresql_password
     restart: always
@@ -45,16 +69,8 @@ services:
       timeout: 5s
       retries: 5
 
-# Let Docker Managed the Volumes
-# Delete this line below for "you managed volumes"
-# then on each service rename the volumes 
-# example:
-# (from) -> odoo-db-data:/var/lib/postgresql/data/pgdata
-# (to) -> ./odoo-db-data:/var/lib/postgresql/data/pgdata
 volumes:
   letsencrypt:
-  odoo-web-data:
-  odoo-db-data:
 
 secrets:
   postgresql_password:
