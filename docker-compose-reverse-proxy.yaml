@@ -129,3 +129,4 @@ secrets:
 
 networks:
   web:
+    driver: bridge
