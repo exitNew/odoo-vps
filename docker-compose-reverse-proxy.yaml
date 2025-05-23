@@ -1,67 +1,63 @@
 version: '3.1'
+
 services:
   reverse-proxy:
     image: traefik:v3.1
     command:
       - "--providers.docker"
       - "--providers.docker.exposedbydefault=false"
+      - "--entryPoints.web.address=:80"
       - "--entryPoints.websecure.address=:443"
-      - "--certificatesresolvers.myresolver.acme.tlschallenge=true"
-      # add your email address
-      - "--certificatesresolvers.myresolver.acme.email="
-      - "--certificatesresolvers.myresolver.acme.storage=/letsencrypt/acme.json"
-      - "--entrypoints.web.address=:80"
       - "--entrypoints.web.http.redirections.entrypoint.to=websecure"
       - "--entrypoints.web.http.redirections.entrypoint.scheme=https"
+      - "--certificatesresolvers.myresolver.acme.tlschallenge=true"
+      - "--certificatesresolvers.myresolver.acme.email=you@example.com"
+      - "--certificatesresolvers.myresolver.acme.storage=/letsencrypt/acme.json"
     ports:
       - "80:80"
       - "443:443"
     volumes:
       - letsencrypt:/letsencrypt
       - /var/run/docker.sock:/var/run/docker.sock
+    networks:
+      - web
 
-  web:
-    labels:
-      - "traefik.enable=true"
-      # add your domain
-      - "traefik.http.routers.web.rule=Host(``)"
-      - "traefik.http.routers.web.entrypoints=websecure"
-      - "traefik.http.routers.web.tls.certresolver=myresolver"
+  odoo_www:
     image: odoo:17.0
     depends_on:
-      db:
+      db_www:
         condition: service_healthy
-    ports:
-      - "8069:8069"
-    deploy:
-      mode: replicated
-      replicas: 1
-    volumes:
-      - odoo-web-data:/var/lib/odoo
-      - ./config:/etc/odoo
-      - ./addons:/mnt/extra-addons:rw
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.www.rule=Host(`www.domain.com`)"
+      - "traefik.http.routers.www.entrypoints=websecure"
+      - "traefik.http.routers.www.tls.certresolver=myresolver"
     environment:
       - PASSWORD_FILE=/run/secrets/postgresql_password
     secrets:
       - postgresql_password
+    volumes:
+      - odoo-www-data:/var/lib/odoo
+      - ./config:/etc/odoo
+      - ./addons:/mnt/extra-addons:rw
     command: >
       -- --dev=reload
       --without-demo=all
-      -d odoo-test
+      -d www-db
       -u all
     restart: always
+    networks:
+      - web
 
-  db:
+  db_www:
     image: postgres:15
     environment:
-      - POSTGRES_DB=odoo-test
+      - POSTGRES_DB=www-db
       - POSTGRES_PASSWORD_FILE=/run/secrets/postgresql_password
       - POSTGRES_USER=odoo
       - PGDATA=/var/lib/postgresql/data/pgdata
-    ports:
-      - "54321:5432"
     volumes:
-      - odoo-db-data:/var/lib/postgresql/data/pgdata
+      - odoo-www-db:/var/lib/postgresql/data/pgdata
     secrets:
       - postgresql_password
     restart: always
@@ -70,12 +66,66 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    networks:
+      - web
+
+  odoo_kasir:
+    image: odoo:17.0
+    depends_on:
+      db_kasir:
+        condition: service_healthy
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.kasir.rule=Host(`kasir.domain.com`)"
+      - "traefik.http.routers.kasir.entrypoints=websecure"
+      - "traefik.http.routers.kasir.tls.certresolver=myresolver"
+    environment:
+      - PASSWORD_FILE=/run/secrets/postgresql_password
+    secrets:
+      - postgresql_password
+    volumes:
+      - odoo-kasir-data:/var/lib/odoo
+      - ./config:/etc/odoo
+      - ./addons:/mnt/extra-addons:rw
+    command: >
+      -- --dev=reload
+      --without-demo=all
+      -d kasir-db
+      -u all
+    restart: always
+    networks:
+      - web
+
+  db_kasir:
+    image: postgres:15
+    environment:
+      - POSTGRES_DB=kasir-db
+      - POSTGRES_PASSWORD_FILE=/run/secrets/postgresql_password
+      - POSTGRES_USER=odoo
+      - PGDATA=/var/lib/postgresql/data/pgdata
+    volumes:
+      - odoo-kasir-db:/var/lib/postgresql/data/pgdata
+    secrets:
+      - postgresql_password
+    restart: always
+    healthcheck:
+      test: [ "CMD", "pg_isready" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - web
 
 volumes:
   letsencrypt:
-  odoo-web-data:
-  odoo-db-data:
+  odoo-www-data:
+  odoo-kasir-data:
+  odoo-www-db:
+  odoo-kasir-db:
 
 secrets:
   postgresql_password:
     file: secrets/odoo_pg_pass
+
+networks:
+  web:
