@@ -52,7 +52,6 @@ services:
 # (from) -> odoo-db-data:/var/lib/postgresql/data/pgdata
 # (to) -> ./odoo-db-data:/var/lib/postgresql/data/pgdata
 volumes:
-  letsencrypt:
   odoo-web-data:
   odoo-db-data:
 
