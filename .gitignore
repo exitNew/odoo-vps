@@ -2,3 +2,4 @@ odoo-db-data
 odoo-web-data
 addons/*/
 .vscode
+.DS_Store
