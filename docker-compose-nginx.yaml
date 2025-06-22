@@ -1,4 +1,4 @@
-version: '3.1'
+# version: '3.1'
 
 services:
   nginx-proxy:
@@ -13,7 +13,6 @@ services:
       - nginx_certs:/etc/nginx/certs:rw
       - nginx_vhost:/etc/nginx/vhost.d
       - nginx_html:/usr/share/nginx/html
-      - nginx_conf:/etc/nginx/conf.d
       - ./nginx/vhost.d:/etc/nginx/vhost.d:ro
     networks:
       - webnet
@@ -24,6 +23,7 @@ services:
     restart: always
     environment:
       - DEFAULT_EMAIL=${EMAIL}
+      - NGINX_PROXY_CONTAINER=nginx-proxy
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - nginx_certs:/etc/nginx/certs:rw
@@ -39,8 +39,12 @@ services:
       - VIRTUAL_HOST=${DOMAIN}
       - LETSENCRYPT_HOST=${DOMAIN}
       - LETSENCRYPT_EMAIL=${EMAIL}
-      - POSTGRES_USER_FILE=/run/secrets/pg_user
-      - POSTGRES_PASSWORD_FILE=/run/secrets/pg_pass
+      - PASSWORD_FILE=/run/secrets/pg_pass
+      - VIRTUAL_PORT=8069
+      - DB_HOST=${DB_HOST}
+      - DB_PORT=${DB_PORT}
+      - DB_USER=${DB_USER}
+      - DB_PASSWORD=${DB_PASSWORD}
     secrets:
       - pg_user
       - pg_pass
@@ -56,13 +60,13 @@ services:
       --without-demo=all
       -d odoo-test
       -u all
-      --longpolling-port=8072
     depends_on:
       db:
         condition: service_healthy
     restart: always
     networks:
       - webnet
+      - dbnet
 
   db:
     image: postgres:15
@@ -86,6 +90,7 @@ services:
       timeout: 5s
       retries: 5
     networks:
+      - dbnet
       - webnet
 
 volumes:
@@ -94,7 +99,6 @@ volumes:
   nginx_certs:
   nginx_vhost:
   nginx_html:
-  nginx_conf:
 
 secrets:
   pg_user:
@@ -104,3 +108,4 @@ secrets:
 
 networks:
   webnet:
+  dbnet:
