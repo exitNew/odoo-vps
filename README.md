@@ -30,3 +30,41 @@ sudo apt install docker-ce docker-ce-cli containerd.io
 ```
 sudo systemctl status docker
 ```
+
+# 2. Setup Password env
+
+```
+# Install if you don't have it: sudo apt install apache2-utils
+htpasswd -nb admin 'MyStr0ngP@ssw0rd!'
+
+`admin:<the hash>`
+
+# Then add it on .env
+TRAEFIK_DASHBOARD_USER as admin
+TRAEFIK_DASHBOARD_PASS_HASH as <the hash>
+```
+
+
+# 3. Add on addons folder
+
+
+
+# 4. Chmod letsencrypt
+
+if you using docker-compose-traefik.yaml you dont have to do this
+
+
+# 5. Create Cert for nginx (if you use nginx)
+
+if you using docker-compose-traefik.yaml you dont have to do this
+
+
+
+# 6. RUN
+
+```
+docker-compose -f docker-compose-nginx.yaml up -d
+
+# or
+docker-compose -f docker-compose-nginx.yaml up --build -d
+```
