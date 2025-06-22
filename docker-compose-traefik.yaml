@@ -1,41 +1,82 @@
-# version: '3.1'
+version: '3.1'
 
 services:
   reverse-proxy:
     image: traefik:v3.1
+    container_name: traefik
     command:
-      - "--providers.docker"
+      - "--providers.docker=true"
       - "--providers.docker.exposedbydefault=false"
       - "--entryPoints.web.address=:80"
       - "--entryPoints.websecure.address=:443"
+      - "--entryPoints.traefik.address=:8080"
       - "--entrypoints.web.http.redirections.entrypoint.to=websecure"
       - "--entrypoints.web.http.redirections.entrypoint.scheme=https"
       - "--certificatesresolvers.myresolver.acme.tlschallenge=true"
-      - "--certificatesresolvers.myresolver.acme.email=you@example.com"
+      - "--certificatesresolvers.myresolver.acme.email=${MY_EMAIL}"
       - "--certificatesresolvers.myresolver.acme.storage=/letsencrypt/acme.json"
+      - "--log.level=INFO"
+      - "--api.dashboard=true"
     ports:
       - "80:80"
       - "443:443"
+      - "8080:8080"
     volumes:
-      - letsencrypt:/letsencrypt
+      - ./letsencrypt:/letsencrypt
       - /var/run/docker.sock:/var/run/docker.sock
     networks:
       - web
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.traefik.rule=Host(`${MY_DOMAIN}`) && PathPrefix(`/traefik`)"
+      - "traefik.http.routers.traefik.entrypoints=websecure"
+      - "traefik.http.routers.traefik.tls.certresolver=myresolver"
+      - "traefik.http.routers.traefik.service=api@internal"
+      - "traefik.http.routers.traefik.middlewares=auth"
+      - "traefik.http.middlewares.auth.basicauth.users=admin:$apr1$H6uskkkW$IgXLP6ewTrSuBkTrqE8wj/"
 
   odoo_www:
-    image: odoo:18.0
+    image: odoo:${ODOO_VERSION}
+    container_name: odoo
     depends_on:
       db:
         condition: service_healthy
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.www.rule=Host(`www.domain.com`)"
+      - "traefik.http.routers.www.rule=Host(`${MY_DOMAIN}`)"
       - "traefik.http.routers.www.entrypoints=websecure"
       - "traefik.http.routers.www.tls.certresolver=myresolver"
+      - "traefik.http.routers.www.middlewares=secure-headers,rate-limit"
+      - "traefik.http.services.www.loadbalancer.server.port=8069"
+
+      - "traefik.http.routers.longpolling.rule=Host(`${MY_DOMAIN}`) && PathPrefix(`/longpolling`)"
+      - "traefik.http.routers.longpolling.entrypoints=websecure"
+      - "traefik.http.routers.longpolling.tls.certresolver=myresolver"
+      - "traefik.http.routers.longpolling.middlewares=secure-headers,rate-limit"
+      - "traefik.http.services.longpolling.loadbalancer.server.port=8072"
+
+      # Secure headers
+      - "traefik.http.middlewares.secure-headers.headers.forceSTSHeader=true"
+      - "traefik.http.middlewares.secure-headers.headers.stsSeconds=31536000"
+      - "traefik.http.middlewares.secure-headers.headers.stsIncludeSubdomains=true"
+      - "traefik.http.middlewares.secure-headers.headers.stsPreload=true"
+      - "traefik.http.middlewares.secure-headers.headers.contentTypeNosniff=true"
+      - "traefik.http.middlewares.secure-headers.headers.browserXssFilter=true"
+      - "traefik.http.middlewares.secure-headers.headers.customResponseHeaders.Content-Security-Policy=default-src 'self'; frame-ancestors 'none';"
+
+      # Rate limiting
+      - "traefik.http.middlewares.rate-limit.ratelimit.average=20"
+      - "traefik.http.middlewares.rate-limit.ratelimit.burst=10"
+
     environment:
-      - PASSWORD_FILE=/run/secrets/postgresql_password
+      - POSTGRES_USER_FILE=/run/secrets/pg_user
+      - POSTGRES_PASSWORD_FILE=/run/secrets/pg_pass
     secrets:
-      - postgresql_password
+      - pg_user
+      - pg_pass
+    expose:
+      - "8069"
+      - "8072"
     volumes:
       - odoo-www-data:/var/lib/odoo
       - ./config:/etc/odoo
@@ -45,21 +86,24 @@ services:
       --without-demo=all
       -d www-db
       -u all
+      --longpolling-port=8072
     restart: always
     networks:
       - web
 
   db:
     image: postgres:15
+    container_name: odoo-db
     environment:
-      - POSTGRES_DB=test-db
-      - POSTGRES_PASSWORD_FILE=/run/secrets/postgresql_password
-      - POSTGRES_USER=odoo
+      - POSTGRES_DB=postgres-db
+      - POSTGRES_USER_FILE=/run/secrets/pg_user
+      - POSTGRES_PASSWORD_FILE=/run/secrets/pg_pass
       - PGDATA=/var/lib/postgresql/data/pgdata
     volumes:
       - odoo-db:/var/lib/postgresql/data/pgdata
     secrets:
-      - postgresql_password
+      - pg_user
+      - pg_pass
     restart: always
     healthcheck:
       test: [ "CMD", "pg_isready" ]
@@ -69,42 +113,16 @@ services:
     networks:
       - web
 
-  odoo_kasir:
-    image: odoo:17.0
-    depends_on:
-      db:
-        condition: service_healthy
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.kasir.rule=Host(`kasir.domain.com`)"
-      - "traefik.http.routers.kasir.entrypoints=websecure"
-      - "traefik.http.routers.kasir.tls.certresolver=myresolver"
-    environment:
-      - PASSWORD_FILE=/run/secrets/postgresql_password
-    secrets:
-      - postgresql_password
-    volumes:
-      - odoo-kasir-data:/var/lib/odoo
-      - ./config:/etc/odoo
-      - ./addons:/mnt/extra-addons:rw
-    command: >
-      -- --dev=reload
-      --without-demo=all
-      -d kasir-db
-      -u all
-    restart: always
-    networks:
-      - web
-
 volumes:
   letsencrypt:
   odoo-www-data:
-  odoo-kasir-data:
   odoo-db:
 
 secrets:
-  postgresql_password:
-    file: secrets/odoo_pg_pass
+  pg_user:
+    file: secrets/pg_user
+  pg_pass:
+    file: secrets/pg_pass
 
 networks:
   web:

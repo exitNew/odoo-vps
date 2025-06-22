@@ -1,0 +1,100 @@
+version: '3.1'
+
+services:
+  nginx-proxy:
+    image: nginxproxy/nginx-proxy:latest
+    container_name: nginx-proxy
+    restart: always
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - /var/run/docker.sock:/tmp/docker.sock:ro
+      - nginx_certs:/etc/nginx/certs:rw
+      - nginx_vhost:/etc/nginx/vhost.d
+      - nginx_html:/usr/share/nginx/html
+      - nginx_conf:/etc/nginx/conf.d
+    networks:
+      - webnet
+
+  letsencrypt:
+    image: nginxproxy/acme-companion:latest
+    container_name: nginx-proxy-acme
+    restart: always
+    environment:
+      - DEFAULT_EMAIL=${EMAIL}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - nginx_certs:/etc/nginx/certs:rw
+      - nginx_vhost:/etc/nginx/vhost.d
+      - nginx_html:/usr/share/nginx/html
+    networks:
+      - webnet
+
+  web:
+    image: odoo:${ODOO_VERSION}
+    container_name: odoo
+    environment:
+      - VIRTUAL_HOST=${DOMAIN}
+      - LETSENCRYPT_HOST=${DOMAIN}
+      - LETSENCRYPT_EMAIL=${EMAIL}
+      - PASSWORD_FILE=/run/secrets/postgresql_password
+    secrets:
+      - postgresql_password
+    expose:
+      - "8069"
+      - "8072"
+    volumes:
+      - odoo-web-data:/var/lib/odoo
+      - ./config:/etc/odoo
+      - ./addons:/mnt/extra-addons:rw
+    command: >
+      -- --dev=reload
+      --without-demo=all
+      -d odoo-test
+      -u all
+      --longpolling-port=8072
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: always
+    networks:
+      - webnet
+
+  db:
+    image: postgres:15
+    container_name: odoo-db
+    environment:
+      - POSTGRES_DB=odoo-test
+      - POSTGRES_PASSWORD_FILE=/run/secrets/postgresql_password
+      - POSTGRES_USER=odoo
+      - PGDATA=/var/lib/postgresql/data/pgdata
+    ports:
+      - "54321:5432"
+    volumes:
+      - odoo-db-data:/var/lib/postgresql/data/pgdata
+    secrets:
+      - postgresql_password
+    restart: always
+    healthcheck:
+      test: [ "CMD", "pg_isready" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - webnet
+
+volumes:
+  odoo-web-data:
+  odoo-db-data:
+  nginx_certs:
+  nginx_vhost:
+  nginx_html:
+  nginx_conf:
+
+secrets:
+  postgresql_password:
+    file: secrets/odoo_pg_pass
+
+networks:
+  webnet:

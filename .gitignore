@@ -1,5 +1,7 @@
 odoo-db-data
 odoo-web-data
-addons/*/
+addons/*
+!addons/README.md
 .vscode
 .DS_Store
+.env
