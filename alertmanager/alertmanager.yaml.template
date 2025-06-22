@@ -1,0 +1,15 @@
+global:
+  smtp_smarthost: '${ALERT_SMTP_SMARTHOST}'
+  smtp_from: '${ALERT_SMTP_FROM}'
+  smtp_auth_username: '${ALERT_SMTP_USER}'
+  smtp_auth_password: '${ALERT_SMTP_PASS}'
+  smtp_require_tls: true
+
+route:
+  receiver: 'email-team'
+
+receivers:
+  - name: 'email-team'
+    email_configs:
+      - to: '${ALERT_RECEIVER_EMAIL}'
+        send_resolved: true

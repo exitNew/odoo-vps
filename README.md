@@ -68,3 +68,14 @@ docker-compose -f docker-compose-nginx.yaml up -d
 # or
 docker-compose -f docker-compose-nginx.yaml up --build -d
 ```
+
+# 7. Prometheus, grafana, alertmanager
+
+
+```
+	•	Traefik: https://your-domain/traefik
+	•	Prometheus: http://your-server:9090
+	•	Alertmanager: http://your-server:9093
+	•	Grafana: http://your-server:3000 (login: admin / admin)
+
+```

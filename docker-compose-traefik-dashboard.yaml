@@ -1,0 +1,172 @@
+version: '3.1'
+
+services:
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+      - ./prometheus/alert.rules.yml:/etc/prometheus/alert.rules.yml
+      - prometheus_data:/prometheus
+    ports:
+      - "9090:9090"
+    networks:
+      - web
+
+  alertmanager:
+    image: prom/alertmanager:latest
+    container_name: alertmanager
+    volumes:
+      - ./alertmanager:/etc/alertmanager
+      - ./generate-alertmanager.sh:/generate-alertmanager.sh:ro
+    ports:
+      - "9093:9093"
+    networks:
+      - web
+    entrypoint: ["/bin/sh", "-c", "/generate-alertmanager.sh && /bin/alertmanager --config.file=/etc/alertmanager/alertmanager.yaml"]
+
+
+  grafana:
+    image: grafana/grafana-oss:latest
+    container_name: grafana
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=${GRAFANA_USER}
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASS}
+    volumes:
+      - grafana_data:/var/lib/grafana
+    networks:
+      - web
+  reverse-proxy:
+    image: traefik:v3.1
+    container_name: traefik
+    command:
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--entryPoints.web.address=:80"
+      - "--entryPoints.websecure.address=:443"
+      - "--entryPoints.traefik.address=:8080"
+      - "--entrypoints.web.http.redirections.entrypoint.to=websecure"
+      - "--entrypoints.web.http.redirections.entrypoint.scheme=https"
+      - "--certificatesresolvers.myresolver.acme.tlschallenge=true"
+      - "--certificatesresolvers.myresolver.acme.email=${MY_EMAIL}"
+      - "--certificatesresolvers.myresolver.acme.storage=/letsencrypt/acme.json"
+      - "--log.level=INFO"
+      - "--api.dashboard=true"
+      - "--metrics.prometheus=true"
+      - "--metrics.prometheus.entrypoint=metrics"
+      - "--entryPoints.metrics.address=:8082"
+    ports:
+      - "80:80"
+      - "443:443"
+      - "8080:8080"
+      - "8082:8082"
+    volumes:
+      - ./letsencrypt:/letsencrypt
+      - /var/run/docker.sock:/var/run/docker.sock
+    networks:
+      - web
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.traefik.rule=Host(`${MY_DOMAIN}`) && PathPrefix(`/traefik`)"
+      - "traefik.http.routers.traefik.entrypoints=websecure"
+      - "traefik.http.routers.traefik.tls.certresolver=myresolver"
+      - "traefik.http.routers.traefik.service=api@internal"
+      - "traefik.http.routers.traefik.middlewares=auth"
+      - "traefik.http.middlewares.auth.basicauth.users=${TRAEFIK_DASHBOARD_USER}:${TRAEFIK_DASHBOARD_PASS_HASH}"
+
+  odoo_www:
+    image: odoo:${ODOO_VERSION}
+    container_name: odoo
+    depends_on:
+      db:
+        condition: service_healthy
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.www.rule=Host(`${MY_DOMAIN}`)"
+      - "traefik.http.routers.www.entrypoints=websecure"
+      - "traefik.http.routers.www.tls.certresolver=myresolver"
+      - "traefik.http.routers.www.middlewares=secure-headers,rate-limit"
+      - "traefik.http.services.www.loadbalancer.server.port=8069"
+
+      - "traefik.http.routers.longpolling.rule=Host(`${MY_DOMAIN}`) && PathPrefix(`/longpolling`)"
+      - "traefik.http.routers.longpolling.entrypoints=websecure"
+      - "traefik.http.routers.longpolling.tls.certresolver=myresolver"
+      - "traefik.http.routers.longpolling.middlewares=secure-headers,rate-limit"
+      - "traefik.http.services.longpolling.loadbalancer.server.port=8072"
+
+      # Secure headers
+      - "traefik.http.middlewares.secure-headers.headers.forceSTSHeader=true"
+      - "traefik.http.middlewares.secure-headers.headers.stsSeconds=31536000"
+      - "traefik.http.middlewares.secure-headers.headers.stsIncludeSubdomains=true"
+      - "traefik.http.middlewares.secure-headers.headers.stsPreload=true"
+      - "traefik.http.middlewares.secure-headers.headers.contentTypeNosniff=true"
+      - "traefik.http.middlewares.secure-headers.headers.browserXssFilter=true"
+      - "traefik.http.middlewares.secure-headers.headers.customResponseHeaders.Content-Security-Policy=default-src 'self'; frame-ancestors 'none';"
+
+      # Rate limiting
+      - "traefik.http.middlewares.rate-limit.ratelimit.average=20"
+      - "traefik.http.middlewares.rate-limit.ratelimit.burst=10"
+
+    environment:
+      - POSTGRES_USER_FILE=/run/secrets/pg_user
+      - POSTGRES_PASSWORD_FILE=/run/secrets/pg_pass
+    secrets:
+      - pg_user
+      - pg_pass
+    expose:
+      - "8069"
+      - "8072"
+    volumes:
+      - odoo-www-data:/var/lib/odoo
+      - ./config:/etc/odoo
+      - ./addons:/mnt/extra-addons:rw
+    command: >
+      -- --dev=reload
+      --without-demo=all
+      -d www-db
+      -u all
+      --longpolling-port=8072
+    restart: always
+    networks:
+      - web
+
+  db:
+    image: postgres:15
+    container_name: odoo-db
+    environment:
+      - POSTGRES_DB=postgres-db
+      - POSTGRES_USER_FILE=/run/secrets/pg_user
+      - POSTGRES_PASSWORD_FILE=/run/secrets/pg_pass
+      - PGDATA=/var/lib/postgresql/data/pgdata
+    volumes:
+      - odoo-db:/var/lib/postgresql/data/pgdata
+    secrets:
+      - pg_user
+      - pg_pass
+    restart: always
+    healthcheck:
+      test: [ "CMD", "pg_isready" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - web
+
+volumes:
+  letsencrypt:
+  odoo-www-data:
+  odoo-db:
+  prometheus_data:
+  grafana_data:
+
+secrets:
+  pg_user:
+    file: secrets/pg_user
+  pg_pass:
+    file: secrets/pg_pass
+
+networks:
+  web:
+    driver: bridge
