@@ -39,9 +39,11 @@ services:
       - VIRTUAL_HOST=${DOMAIN}
       - LETSENCRYPT_HOST=${DOMAIN}
       - LETSENCRYPT_EMAIL=${EMAIL}
-      - PASSWORD_FILE=/run/secrets/postgresql_password
+      - POSTGRES_USER_FILE=/run/secrets/pg_user
+      - POSTGRES_PASSWORD_FILE=/run/secrets/pg_pass
     secrets:
-      - postgresql_password
+      - pg_user
+      - pg_pass
     expose:
       - "8069"
       - "8072"
@@ -67,15 +69,16 @@ services:
     container_name: odoo-db
     environment:
       - POSTGRES_DB=odoo-test
-      - POSTGRES_PASSWORD_FILE=/run/secrets/postgresql_password
-      - POSTGRES_USER=odoo
+      - POSTGRES_USER_FILE=/run/secrets/pg_user
+      - POSTGRES_PASSWORD_FILE=/run/secrets/pg_pass
       - PGDATA=/var/lib/postgresql/data/pgdata
     ports:
       - "54321:5432"
     volumes:
       - odoo-db-data:/var/lib/postgresql/data/pgdata
     secrets:
-      - postgresql_password
+      - pg_user
+      - pg_pass
     restart: always
     healthcheck:
       test: [ "CMD", "pg_isready" ]
@@ -94,8 +97,10 @@ volumes:
   nginx_conf:
 
 secrets:
-  postgresql_password:
-    file: secrets/odoo_pg_pass
+  pg_user:
+    file: secrets/pg_user
+  pg_pass:
+    file: secrets/pg_pass
 
 networks:
   webnet:
