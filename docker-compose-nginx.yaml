@@ -35,12 +35,11 @@ services:
   web:
     image: odoo:${ODOO_VERSION}
     container_name: odoo
-    labels:
-      - "com.github.nginxproxy.nginx-proxy.virtual_host=${DOMAIN}"
-      - "com.github.nginxproxy.nginx-proxy.virtual_port=${VIRTUAL_PORT}"
-      - "com.github.nginxproxy.acme-companion.letsencrypt_host=${DOMAIN}"
-      - "com.github.nginxproxy.acme-companion.letsencrypt_email=${EMAIL}"
     environment:
+      - VIRTUAL_HOST=${DOMAIN}
+      - LETSENCRYPT_HOST=${DOMAIN}
+      - LETSENCRYPT_EMAIL=${EMAIL}
+      - VIRTUAL_PORT=${VIRTUAL_PORT}
       - DB_HOST=${DB_HOST}
       - DB_PORT=${DB_PORT}
       - DB_USER=${DB_USER}
