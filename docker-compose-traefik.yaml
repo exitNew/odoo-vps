@@ -13,7 +13,7 @@ services:
       - "--entrypoints.web.http.redirections.entrypoint.to=websecure"
       - "--entrypoints.web.http.redirections.entrypoint.scheme=https"
       - "--certificatesresolvers.myresolver.acme.tlschallenge=true"
-      - "--certificatesresolvers.myresolver.acme.email=${MY_EMAIL}"
+      - "--certificatesresolvers.myresolver.acme.email=${EMAIL}"
       - "--certificatesresolvers.myresolver.acme.storage=/letsencrypt/acme.json"
       - "--log.level=INFO"
       - "--api.dashboard=true"
@@ -28,7 +28,7 @@ services:
       - web
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.traefik.rule=Host(`${MY_DOMAIN}`) && PathPrefix(`/traefik`)"
+      - "traefik.http.routers.traefik.rule=Host(`${DOMAIN}`) && PathPrefix(`/traefik`)"
       - "traefik.http.routers.traefik.entrypoints=websecure"
       - "traefik.http.routers.traefik.tls.certresolver=myresolver"
       - "traefik.http.routers.traefik.service=api@internal"
@@ -43,13 +43,13 @@ services:
         condition: service_healthy
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.www.rule=Host(`${MY_DOMAIN}`)"
+      - "traefik.http.routers.www.rule=Host(`${DOMAIN}`)"
       - "traefik.http.routers.www.entrypoints=websecure"
       - "traefik.http.routers.www.tls.certresolver=myresolver"
       - "traefik.http.routers.www.middlewares=secure-headers,rate-limit"
       - "traefik.http.services.www.loadbalancer.server.port=8069"
 
-      - "traefik.http.routers.longpolling.rule=Host(`${MY_DOMAIN}`) && PathPrefix(`/longpolling`)"
+      - "traefik.http.routers.longpolling.rule=Host(`${DOMAIN}`) && PathPrefix(`/longpolling`)"
       - "traefik.http.routers.longpolling.entrypoints=websecure"
       - "traefik.http.routers.longpolling.tls.certresolver=myresolver"
       - "traefik.http.routers.longpolling.middlewares=secure-headers,rate-limit"
@@ -86,7 +86,6 @@ services:
       --without-demo=all
       -d www-db
       -u all
-      --longpolling-port=8072
     restart: always
     networks:
       - web
