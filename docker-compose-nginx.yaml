@@ -39,12 +39,12 @@ services:
       - VIRTUAL_HOST=${DOMAIN}
       - LETSENCRYPT_HOST=${DOMAIN}
       - LETSENCRYPT_EMAIL=${EMAIL}
-      - PASSWORD_FILE=/run/secrets/pg_pass
-      - VIRTUAL_PORT=8069
+      - VIRTUAL_PORT=${VIRTUAL_PORT}
       - DB_HOST=${DB_HOST}
       - DB_PORT=${DB_PORT}
       - DB_USER=${DB_USER}
       - DB_PASSWORD=${DB_PASSWORD}
+      - PASSWORD_FILE=/run/secrets/pg_pass
     secrets:
       - pg_user
       - pg_pass
@@ -67,6 +67,11 @@ services:
     networks:
       - webnet
       - dbnet
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://{DOMAIN}/web/login"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
 
   db:
     image: postgres:15

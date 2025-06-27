@@ -1,10 +1,5 @@
-Add certs first
+You can choose between manual config or dynamic using vhost.d
 
-```
-mkdir certs
-openssl req -x509 -nodes -days 365 \
-  -newkey rsa:2048 \
-  -keyout ./certs/selfsigned.key \
-  -out ./certs/selfsigned.crt \
-  -subj "/CN=localhost"
-```
+my setup using dynamic vhost.d
+
+add your domain
